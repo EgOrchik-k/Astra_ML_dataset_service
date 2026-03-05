@@ -10,6 +10,14 @@ from typing import List, Dict, Any, Optional
 
 KV_RE = re.compile(r"(\w+)=([^\s]+)")
 
+def parse_bytes(raw_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
+    """
+    Вернуть list[dict] независимо от формата файла (csv/json/jsonl/kv).
+    """
+    text = raw_bytes.decode("utf-8", errors="replace")
+    # дальше твоя логика определения формата по filename и парсинг
+    # return rows
+
 def _parse_csv(text: str) -> List[Dict[str, Any]]:
     reader = csv.DictReader(io.StringIO(text))
     return [dict(row) for row in reader]

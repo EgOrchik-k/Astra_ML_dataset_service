@@ -1,8 +1,23 @@
-#сохраняет в формате для файла
-
 import csv
 import os
-from typing import List, Dict, Optional
+from typing import List, Dict
+from pathlib import Path
+
+# куда складываем загруженные файлы
+UPLOADS_DIR = Path(__file__).resolve().parent.parent / "storage" / "uploads"
+
+
+def save_upload_file_api(upload_id: str, filename: str, content: bytes) -> str:
+    """
+    Сохраняет загруженный файл на диск и возвращает путь.
+    Используется в POST /uploads
+    """
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = filename.replace("/", "_").replace("\\", "_")
+    path = UPLOADS_DIR / f"{upload_id}_{safe_name}"
+    path.write_bytes(content)
+    return str(path)
+
 
 def save_data_to_file_api(data: List[Dict], file_path: str, overwrite: bool = False) -> str:
     if not data:

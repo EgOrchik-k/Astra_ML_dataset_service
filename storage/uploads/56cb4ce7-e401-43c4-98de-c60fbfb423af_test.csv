@@ -1,0 +1,4 @@
+user,ip,event
+alex,192.168.1.1,login
+kate,10.0.0.5,logout
+john,172.16.0.2,login

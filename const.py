@@ -1,3 +1,7 @@
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+STORAGE_DIR = BASE_DIR / "storage" / "uploads"
 
 TYPES = ['str', 'int', 'float', 'bool']
 

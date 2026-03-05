@@ -2,6 +2,15 @@
 
 from fastapi import FastAPI
 from api.routes import router
+from fastapi import FastAPI
+from api.routes import router
+
+app = FastAPI()
+app.include_router(router)
+
+@app.get("/")
+def root():
+    return {"status": "ok", "docs": "/docs"}
 
 app = FastAPI(
     title="Astra_prog API",

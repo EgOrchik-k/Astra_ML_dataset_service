@@ -1,64 +1,100 @@
-#сохраняет в формате для БД
+import json
+import sqlite3
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-import psycopg2
-from psycopg2.extras import execute_batch, DictCursor
-from psycopg2 import sql
-from typing import List, Dict, Any, Optional
+DB_PATH = Path(__file__).resolve().parent.parent / "backend.db"
 
-def save_data_to_db_api(
-    data: List[Dict[str, Any]],
-    table_name: str,
-    dbname: str,
-    user: str,
-    password: str,
-    host: str,
-    port: str = "5432",
-    create_table: bool = True
-) -> int:
-    if not data:
-        raise ValueError("No data to save")
 
-    conn = psycopg2.connect(
-        dbname=dbname,  # <-- важно
-        user=user,
-        password=password,
-        host=host,
-        port=port
-    )
+def _connect():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-    try:
-        cursor = conn.cursor(cursor_factory=DictCursor)
 
-        columns = list(data[0].keys())
-        columns_sql = sql.SQL(", ").join(sql.Identifier(c) for c in columns)
-        values_sql = sql.SQL(", ").join(sql.Placeholder(c) for c in columns)
-
-        if create_table:
-            # базовая таблица + колонки
-            cursor.execute(
-                sql.SQL("CREATE TABLE IF NOT EXISTS {t} (id SERIAL PRIMARY KEY);")
-                .format(t=sql.Identifier(table_name))
+def init_db():
+    with _connect() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS uploads (
+                id TEXT PRIMARY KEY,
+                filename TEXT NOT NULL,
+                path TEXT NOT NULL,
+                created_at TEXT NOT NULL
             )
-            for c in columns:
-                cursor.execute(
-                    sql.SQL('ALTER TABLE {t} ADD COLUMN IF NOT EXISTS {c} VARCHAR(200);')
-                    .format(t=sql.Identifier(table_name), c=sql.Identifier(c))
-                )
-            conn.commit()
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS raw_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                upload_id TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(upload_id) REFERENCES uploads(id)
+            )
+        """)
 
-        insert_q = sql.SQL("INSERT INTO {t} ({cols}) VALUES ({vals})").format(
-            t=sql.Identifier(table_name),
-            cols=columns_sql,
-            vals=values_sql
+
+def create_upload(upload_id: str, filename: str, path: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO uploads (id, filename, path, created_at) VALUES (?, ?, ?, ?)",
+            (upload_id, filename, path, datetime.utcnow().isoformat())
         )
 
-        execute_batch(cursor, insert_q, data)
-        conn.commit()
-        return len(data)
 
-    finally:
-        try:
-            cursor.close()
-        except:
-            pass
-        conn.close()
+def get_upload(upload_id: str) -> Optional[Dict[str, Any]]:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM uploads WHERE id = ?", (upload_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def insert_raw_records(upload_id: str, rows: List[Dict[str, Any]]) -> int:
+    now = datetime.utcnow().isoformat()
+    with _connect() as conn:
+        conn.executemany(
+            "INSERT INTO raw_records (upload_id, payload, created_at) VALUES (?, ?, ?)",
+            [(upload_id, json.dumps(r, ensure_ascii=False), now) for r in rows]
+        )
+    return len(rows)
+
+
+def get_raw_records(upload_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT id, payload, created_at FROM raw_records WHERE upload_id = ? ORDER BY id ASC LIMIT ?",
+            (upload_id, limit)
+        )
+        out = []
+        for row in cur.fetchall():
+            out.append({
+                "id": row["id"],
+                "created_at": row["created_at"],
+                "payload": json.loads(row["payload"]),
+            })
+        return out
+
+# -------------------------
+# API functions for router
+# -------------------------
+
+def init_uploads_storage_db():
+    return init_db()
+
+
+def create_upload_row(upload_id: str, filename: str, path: str):
+    return create_upload(upload_id, filename, path)
+
+
+def get_upload_row(upload_id: str):
+    return get_upload(upload_id)
+
+
+def insert_raw_records_rows(upload_id: str, rows):
+    return insert_raw_records(upload_id, rows)
+
+
+def get_raw_records_rows(upload_id: str, limit: int = 20):
+    return get_raw_records(upload_id, limit)
+
+def save_data_to_db_api(*args, **kwargs):
+    return save_data_to_db(*args, **kwargs)
